@@ -18,6 +18,11 @@ type vmxTemplateData struct {
 	Version  string
 }
 
+type additionalDiskTemplateData struct {
+	DiskNumber	int
+	DiskName	string
+}
+
 // This step creates the VMX file for the VM.
 //
 // Uses:
@@ -66,6 +71,25 @@ func (s *stepCreateVMX) Run(state multistep.StateBag) multistep.StepAction {
 		}
 
 		vmxTemplate = string(rawBytes)
+	}
+	
+	if len(config.AdditionalDiskSize) > 0 {
+		for i, _ := range config.AdditionalDiskSize {
+			data := &additionalDiskTemplateData{
+				DiskNumber: 	i+1,
+				DiskName: 		config.DiskName,
+			}
+			
+			diskTemplate, err := config.tpl.Process(DefaultAdditionalDiskTemplate,data)
+			if err != nil {
+				err := fmt.Errorf("Error preparing VMX template for additional disk: %s", err)
+				state.Put("error", err)
+				ui.Error(err.Error())
+				return multistep.ActionHalt
+			}
+			
+			vmxTemplate += diskTemplate
+		}
 	}
 
 	vmxContents, err := config.tpl.Process(vmxTemplate, tplData)
@@ -187,4 +211,10 @@ vmci0.id = "1861462627"
 vmci0.pciSlotNumber = "35"
 vmci0.present = "TRUE"
 vmotion.checkpointFBSize = "65536000"
+`
+
+const DefaultAdditionalDiskTemplate = `
+scsi0:{{ .DiskNumber }}.fileName = "{{ .DiskName}}-{{ .DiskNumber }}.vmdk"
+scsi0:{{ .DiskNumber }}.present = "TRUE"
+scsi0:{{ .DiskNumber }}.redo = ""
 `
